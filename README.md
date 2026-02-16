@@ -41,4 +41,4 @@ I wanted a tool that feels practical and lightweight for real life — something
 
 ## Feedback 🤝
 
-If you’ve got ideas, suggestions, or spot bugs, open an issue — I’m building this in public and learning as I go.# cashflow-calendar
+If you’ve got ideas, suggestions, or spot bugs, open an issue — I’m building this in public and learning as I go.
