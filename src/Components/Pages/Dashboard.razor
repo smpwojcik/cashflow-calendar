@@ -1,0 +1,268 @@
+@using Microsoft.AspNetCore.Authorization
+@* Phase A: auth temporarily disabled *@
+@attribute [AllowAnonymous]
+@page "/"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using CashFlowCalendar.Data
+@inject AppDbContext Db
+
+<h1>Cashflow</h1>
+
+@if (_account is null)
+{
+    <p>Loading…</p>
+}
+else
+{
+    <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+
+        <div style="min-width:320px; padding:16px; border:1px solid #333; border-radius:12px;">
+            <h3>Current balance</h3>
+
+            <div style="display:grid; gap:10px;">
+                <label>
+                    Balance
+                    <input type="number" step="0.01"
+                           @bind="_editBalance" @bind:event="oninput"
+                           style="width:100%;" />
+                </label>
+
+                <label>
+                    As of date
+                    <input type="date"
+                           @bind="_editAsOf"
+                           style="width:100%;" />
+                </label>
+
+                <button @onclick="SaveBalance">Save</button>
+
+                <div style="opacity:0.8;">
+                    Saved: @_account.CurrentBalance (as of @_account.BalanceAsOfDate)
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <div style="opacity:0.85;">@_message</div>
+                }
+            </div>
+        </div>
+
+        <div style="min-width:320px; padding:16px; border:1px solid #333; border-radius:12px;">
+            <h3>Add transaction</h3>
+
+            <div style="display:grid; gap:10px;">
+                <label>
+                    Date
+                    <input type="date"
+                           @bind="_newDate"
+                           style="width:100%;" />
+                </label>
+
+                <label>
+                    Amount
+                    <input type="number" step="0.01"
+                           @bind="_newAmount" @bind:event="oninput"
+                           style="width:100%;" />
+                </label>
+
+                <label>
+                    Type
+                    <select @bind="_newType" style="width:100%;">
+                        <option value="Income">Income</option>
+                        <option value="Expense">Expense</option>
+                    </select>
+                </label>
+
+                <label>
+                    Payee (optional)
+                    <input @bind="_newPayee" style="width:100%;" />
+                </label>
+
+                <label>
+                    Notes (optional)
+                    <input @bind="_newNotes" style="width:100%;" />
+                </label>
+
+                <button @onclick="AddTxn">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <hr />
+
+    <h2>Upcoming transactions</h2>
+
+    @if (_txns.Count == 0)
+    {
+        <p>No upcoming transactions yet.</p>
+    }
+    else
+    {
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+            <tr>
+                <th style="text-align:left; border-bottom:1px solid #333; padding:8px;">Date</th>
+                <th style="text-align:left; border-bottom:1px solid #333; padding:8px;">Type</th>
+                <th style="text-align:left; border-bottom:1px solid #333; padding:8px;">Payee</th>
+                <th style="text-align:left; border-bottom:1px solid #333; padding:8px;">Notes</th>
+                <th style="text-align:right; border-bottom:1px solid #333; padding:8px;">Amount</th>
+                <th style="text-align:right; border-bottom:1px solid #333; padding:8px;">Actions</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var t in _txns)
+            {
+                var isIncome = t.Amount >= 0m;
+                <tr>
+                    <td style="padding:8px; border-bottom:1px solid #222;">@t.Date</td>
+                    <td style="padding:8px; border-bottom:1px solid #222;">@(isIncome ? "Income" : "Expense")</td>
+                    <td style="padding:8px; border-bottom:1px solid #222;">@(t.Payee ?? "")</td>
+                    <td style="padding:8px; border-bottom:1px solid #222;">@(t.Notes ?? "")</td>
+                    <td style="padding:8px; border-bottom:1px solid #222; text-align:right;">@t.Amount</td>
+                    <td style="padding:8px; border-bottom:1px solid #222; text-align:right;">
+                        <button @onclick="() => DeleteTxn(t.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    <hr />
+
+    <h2>Next 30 days forecast</h2>
+
+    @if (_forecast.Count == 0)
+    {
+        <p>No data yet.</p>
+    }
+    else
+    {
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+            <tr>
+                <th style="text-align:left; border-bottom:1px solid #333; padding:8px;">Date</th>
+                <th style="text-align:right; border-bottom:1px solid #333; padding:8px;">Day net</th>
+                <th style="text-align:right; border-bottom:1px solid #333; padding:8px;">Projected balance</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach (var row in _forecast)
+            {
+                <tr>
+                    <td style="padding:8px; border-bottom:1px solid #222;">@row.Date</td>
+                    <td style="padding:8px; border-bottom:1px solid #222; text-align:right;">@row.DayNet</td>
+                    <td style="padding:8px; border-bottom:1px solid #222; text-align:right;">@row.ProjectedBalance</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private Account? _account;
+    private string _newType = "Expense"; // or "Income"
+
+    private decimal _editBalance;
+    private DateOnly _editAsOf = DateOnly.FromDateTime(DateTime.Today);
+
+    private DateOnly _newDate = DateOnly.FromDateTime(DateTime.Today);
+    private decimal _newAmount;
+    private string? _newPayee;
+    private string? _newNotes;
+
+    private string? _message;
+    private List<Txn> _txns = new();
+    private List<Forecast.DailyBalance> _forecast = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _account = await Db.Accounts.FirstOrDefaultAsync();
+
+        if (_account is null)
+        {
+            _account = new Account { Name = "Primary", CurrentBalance = 0m };
+            Db.Accounts.Add(_account);
+            await Db.SaveChangesAsync();
+        }
+
+        _editBalance = _account.CurrentBalance;
+        _editAsOf = _account.BalanceAsOfDate;
+
+        await RefreshData();
+    }
+
+    private async Task SaveBalance()
+    {
+        if (_account is null) return;
+
+        _account.CurrentBalance = _editBalance;
+        _account.BalanceAsOfDate = _editAsOf;
+
+        await Db.SaveChangesAsync();
+        await RefreshData();
+        _message = "Balance updated.";
+    }
+
+    private async Task AddTxn()
+    {
+        if (_account is null) return;
+
+        var txn = new Txn
+        {
+            AccountId = _account.Id,
+            Date = _newDate,
+            Amount = _newType == "Expense" ? -Math.Abs(_newAmount) : Math.Abs(_newAmount),
+            Payee = string.IsNullOrWhiteSpace(_newPayee) ? null : _newPayee.Trim(),
+            Notes = string.IsNullOrWhiteSpace(_newNotes) ? null : _newNotes.Trim()
+        };
+
+        Db.Txns.Add(txn);
+        await Db.SaveChangesAsync();
+
+        await RefreshData();
+
+        _newAmount = 0;
+        _newPayee = null;
+        _newNotes = null;
+        _message = "Transaction added.";
+        _newType = "Expense";
+    }
+
+    private async Task DeleteTxn(int txnId)
+    {
+        if (_account is null) return;
+
+        var txn = await Db.Txns.FirstOrDefaultAsync(t => t.Id == txnId && t.AccountId == _account.Id);
+        if (txn is null) return;
+
+        Db.Txns.Remove(txn);
+        await Db.SaveChangesAsync();
+
+        await RefreshData();
+        _message = "Transaction deleted.";
+    }
+
+    private async Task RefreshData()
+    {
+        if (_account is null) return;
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+
+        _txns = await Db.Txns
+            .Where(t => t.AccountId == _account.Id && t.Date >= today)
+            .OrderBy(t => t.Date)
+            .ThenBy(t => t.Id)
+            .ToListAsync();
+
+        _forecast = Forecast.Build(
+                _account.CurrentBalance,
+                _account.BalanceAsOfDate,
+                today,
+                30,
+                _txns)
+            .ToList();
+    }
+}

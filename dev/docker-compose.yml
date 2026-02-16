@@ -1,0 +1,35 @@
+services:
+  db:
+    image: postgres:16
+    container_name: cashflow-db-dev
+    environment:
+      POSTGRES_DB: cashflow
+      POSTGRES_USER: cashflow
+      POSTGRES_PASSWORD: cashflow_dev_pw_change_me
+    volumes:
+      - /opt/stack/cashflow/data/postgres-dev:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    restart: unless-stopped
+
+  app:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: cashflow-dev
+    working_dir: /src
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://0.0.0.0:5083
+      ConnectionStrings__Default: Host=db;Port=5432;Database=cashflow;Username=cashflow;Password=cashflow_dev_pw_change_me
+    volumes:
+      - /opt/stack/cashflow/src:/src
+      - /opt/stack/cashflow/.nuget:/root/.nuget
+      - /opt/stack/cashflow/dpkeys:/var/dpkeys
+    ports:
+      - "5083:5083"
+    dns:
+      - 10.0.0.97
+    depends_on:
+      - db
+
+    command: ["bash", "-lc", "dotnet restore && dotnet watch run --no-launch-profile --urls http://0.0.0.0:5083"]
+    restart: unless-stopped

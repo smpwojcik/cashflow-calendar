@@ -1,0 +1,17 @@
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+.nuget/
+data/
+dpkeys/
+**/bin/
+**/obj/
+src/.aspnet/
+.env
+.env.*
+!.env.example
+src/appsettings.Development.json
+*.bak
