@@ -19,7 +19,6 @@ public static class Forecast
         var balance = currentBalance;
 
         // If balanceAsOf is after startDate, we still start at startDate using currentBalance as "known".
-        // (We can refine this later if you want stricter logic.)
         for (var i = 0; i < days; i++)
         {
             var date = startDate.AddDays(i);

@@ -26,8 +26,6 @@ services:
       - /opt/stack/cashflow/dpkeys:/var/dpkeys
     ports:
       - "5083:5083"
-    dns:
-      - 10.0.0.97
     depends_on:
       - db
 
